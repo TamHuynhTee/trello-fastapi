@@ -17,10 +17,12 @@ entrypoint = "app.main:app"
 
 [dependency-groups]
 dev = [
+    "commit-check>=2.16.0",
     "httpx2>=2.12.0",
+    "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.16.5",
+    "ruff>=0.16.6",
 ]
 
 [tool.pytest.ini_options]
@@ -30,3 +32,23 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E4",    # Import and whitespace errors
+    "E7",    # Statement errors
+    "E9",    # Syntax/runtime errors
+    "F",     # Pyflakes
+    "I",     # Arrange import
+    "UP",    # Upgrade Python syntax
+    "B",     # Bugbear
+    "SIM",   # Code simplification
+    "ASYNC", # Async errors
+]
+ignore = ["B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
