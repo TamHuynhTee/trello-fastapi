@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (
-    DateTime,
-    ForeignKey,
-    String,
-    UniqueConstraint,
-    func,
-)
+from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,6 +13,16 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.workspace import Workspace
+
+
+class WorkspaceRole(str, Enum):
+    MEMBER = "member"
+    ADMIN = "admin"
+    OWNER = "owner"
+
+
+def workspace_role_values(enum_class: type[Enum]) -> list[str]:
+    return [str(item.value) for item in enum_class]
 
 
 class WorkspaceMember(Base):
@@ -28,13 +34,18 @@ class WorkspaceMember(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
     workspace_id: Mapped[int] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
     )
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-
-    role: Mapped[str] = mapped_column(String(20), nullable=False, default="MEMBER")
+    role: Mapped[WorkspaceRole] = mapped_column(
+        SQLEnum(WorkspaceRole, name="workspacerole", values_callable=workspace_role_values),
+        nullable=False,
+        default=WorkspaceRole.MEMBER,
+        server_default=WorkspaceRole.MEMBER.value,
+    )
 
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -42,6 +53,6 @@ class WorkspaceMember(Base):
         nullable=False,
     )
 
-    user: Mapped[User] = relationship(back_populates="workspace_membership")
+    user: Mapped[User] = relationship(back_populates="workspace_members")
 
     workspace: Mapped[Workspace] = relationship(back_populates="members")

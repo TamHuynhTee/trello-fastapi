@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.board_member import BoardMember
     from app.models.workspace import Workspace
     from app.models.workspace_member import WorkspaceMember
 
@@ -48,6 +49,10 @@ class User(Base):
         back_populates="owner", foreign_keys="workspaces.owner_id"
     )
 
-    workspace_membership: Mapped[list[WorkspaceMember]] = relationship(
+    workspace_members: Mapped[list[WorkspaceMember]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+    board_members: Mapped[list[BoardMember]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
