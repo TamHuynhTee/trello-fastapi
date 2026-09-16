@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.board import Board
     from app.models.user import User
     from app.models.workspace_member import WorkspaceMember
 
@@ -28,7 +29,7 @@ class Workspace(Base):
         nullable=True,
     )
 
-    owner_id: Mapped[str] = mapped_column(
+    owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
@@ -46,6 +47,10 @@ class Workspace(Base):
     )
 
     owner: Mapped[User] = relationship(back_populates="owned_workspaces", foreign_keys=[owner_id])
+
+    boards: Mapped[list[Board]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
 
     members: Mapped[list[WorkspaceMember]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan"
