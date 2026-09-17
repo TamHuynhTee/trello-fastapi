@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -25,11 +25,11 @@ class Workspace(Base):
     )
 
     description: Mapped[str | None] = mapped_column(
-        String(1000),
+        Text,
         nullable=True,
     )
 
-    owner_id: Mapped[int] = mapped_column(
+    author_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
@@ -46,7 +46,9 @@ class Workspace(Base):
         nullable=False,
     )
 
-    owner: Mapped[User] = relationship(back_populates="owned_workspaces", foreign_keys=[owner_id])
+    author: Mapped[User] = relationship(
+        back_populates="authored_workspaces", foreign_keys=[author_id]
+    )
 
     boards: Mapped[list[Board]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan"
