@@ -9,6 +9,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.utils import enum_values
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -19,10 +20,6 @@ class WorkspaceRole(str, Enum):
     MEMBER = "member"
     ADMIN = "admin"
     OWNER = "owner"
-
-
-def workspace_role_values(enum_class: type[Enum]) -> list[str]:
-    return [str(item.value) for item in enum_class]
 
 
 class WorkspaceMember(Base):
@@ -41,7 +38,7 @@ class WorkspaceMember(Base):
     )
 
     role: Mapped[WorkspaceRole] = mapped_column(
-        SQLEnum(WorkspaceRole, name="workspacerole", values_callable=workspace_role_values),
+        SQLEnum(WorkspaceRole, name="workspacerole", values_callable=enum_values),
         nullable=False,
         default=WorkspaceRole.MEMBER,
         server_default=WorkspaceRole.MEMBER.value,

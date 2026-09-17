@@ -4,14 +4,18 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.utils import enum_values
 
 if TYPE_CHECKING:
+    from app.models.board_list import BoardList
     from app.models.board_member import BoardMember
+    from app.models.label import Label
+    from app.models.user import User
     from app.models.workspace import Workspace
 
 
@@ -36,12 +40,16 @@ class Board(Base):
     )
 
     description: Mapped[str | None] = mapped_column(
-        String(1000),
+        Text,
         nullable=True,
     )
 
     workspace_id: Mapped[int] = mapped_column(
         ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
+    )
+
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -58,11 +66,25 @@ class Board(Base):
     )
 
     status: Mapped[BoardStatus] = mapped_column(
-        SQLEnum(BoardStatus), default=BoardStatus.ACTIVE, nullable=False
+        SQLEnum(
+            BoardStatus,
+            name="boardstatus",
+            values_callable=enum_values,
+        ),
+        nullable=False,
+        default=BoardStatus.ACTIVE,
+        server_default=BoardStatus.ACTIVE.value,
     )
 
     view: Mapped[BoardView] = mapped_column(
-        SQLEnum(BoardView), default=BoardView.BOARD, nullable=False
+        SQLEnum(
+            BoardView,
+            name="boardview",
+            values_callable=enum_values,
+        ),
+        nullable=False,
+        default=BoardView.BOARD,
+        server_default=BoardView.BOARD.value,
     )
 
     workspace: Mapped[Workspace] = relationship(
@@ -72,3 +94,11 @@ class Board(Base):
     board_members: Mapped[list[BoardMember]] = relationship(
         back_populates="board", cascade="all, delete-orphan"
     )
+
+    board_lists: Mapped[list[BoardList]] = relationship(
+        back_populates="board", cascade="all, delete-orphan"
+    )
+
+    labels: Mapped[list[Label]] = relationship(back_populates="board", cascade="all, delete-orphan")
+
+    author: Mapped[User | None] = relationship(back_populates="boards", foreign_keys=[author_id])
