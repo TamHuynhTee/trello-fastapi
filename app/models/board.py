@@ -48,8 +48,8 @@ class Board(Base):
         ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False
     )
 
-    author_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    author_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -101,4 +101,4 @@ class Board(Base):
 
     labels: Mapped[list[Label]] = relationship(back_populates="board", cascade="all, delete-orphan")
 
-    author: Mapped[User | None] = relationship(back_populates="boards", foreign_keys=[author_id])
+    author: Mapped[User] = relationship(back_populates="boards", foreign_keys=[author_id])
