@@ -1,0 +1,135 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Never interrupt a main deployment while migrations are running.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: test
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/trello_test
+      JWT_SECRET_KEY: ci-only-test-key-not-for-production-123456
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trello_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d trello_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.17"
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run --no-sync ruff check .
+
+      - name: Check formatting
+        run: uv run --no-sync ruff format --check .
+
+      - name: Run tests
+        run: uv run --no-sync pytest -q
+
+      - name: Apply migrations to empty PostgreSQL
+        run: uv run --no-sync alembic upgrade head
+
+      - name: Check model and migration consistency
+        run: uv run --no-sync alembic check
+
+      - name: Build Docker image
+        env:
+          IMAGE_TAG: trello-api:${{ github.sha }}
+        run: docker build --tag "$IMAGE_TAG" .
+
+  deploy-staging:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: https://staging-api.tamhuynh.site
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and publish staging image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/tamhuynhtee/trello-fastapi:$GITHUB_SHA"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          docker build --label "org.opencontainers.image.source=https://github.com/TamHuynhTee/trello-fastapi" -t "$image" .
+          docker push "$image"
+          docker pull "$image"
+          digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
+          echo "APP_IMAGE=$digest" >> "$GITHUB_ENV"
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          target="$VPS_USER@$VPS_HOST"
+          release="/opt/trello/releases/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p '$release'"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/* "$target:$release/"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "bash '$release/deploy.sh' '$APP_IMAGE'"
+
+      - name: Clean up runner credentials
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519
+          docker logout ghcr.io
